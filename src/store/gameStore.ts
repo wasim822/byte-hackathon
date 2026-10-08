@@ -1,64 +1,91 @@
 import { create } from 'zustand'
 import * as THREE from 'three'
+import { District } from '../data/places'
+
+export type CameraMode = 'chase-close' | 'chase-far' | 'top-down'
 
 interface GameState {
   // Car state
   carPosition: THREE.Vector3
   carRotation: number
   carVelocity: THREE.Vector3
+  carSpeed: number
+  isBoosting: boolean
 
   // Camera state
-  cameraZoom: number
-  minZoom: number
-  maxZoom: number
+  cameraMode: CameraMode
+  cameraLookOffset: { x: number; y: number }
+  lastInputTime: number
 
-  // Input state
-  keys: {
-    forward: boolean
-    backward: boolean
-    left: boolean
-    right: boolean
-    boost: boolean
-  }
+  // Map state
+  mapOpen: boolean
+
+  // District state
+  currentDistrict: District | null
+  districtDisplayName: string | null
+  districtFadeState: 'in' | 'hold' | 'out' | 'hidden'
 
   // Actions
   setCarPosition: (position: THREE.Vector3) => void
   setCarRotation: (rotation: number) => void
   setCarVelocity: (velocity: THREE.Vector3) => void
-  setCameraZoom: (zoom: number) => void
-  setKey: (key: keyof GameState['keys'], pressed: boolean) => void
+  setCarSpeed: (speed: number) => void
+  setIsBoosting: (boosting: boolean) => void
+  setCameraMode: (mode: CameraMode) => void
+  cycleCameraMode: () => void
+  setCameraLookOffset: (offset: { x: number; y: number }) => void
+  setLastInputTime: (time: number) => void
+  setMapOpen: (open: boolean) => void
+  toggleMap: () => void
+  setCurrentDistrict: (district: District | null) => void
+  showDistrictName: (name: string) => void
+  setDistrictFadeState: (state: 'in' | 'hold' | 'out' | 'hidden') => void
 }
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   // Initial car state
-  carPosition: new THREE.Vector3(0, 0.5, 0),
+  carPosition: new THREE.Vector3(0, 1, -60),
   carRotation: 0,
   carVelocity: new THREE.Vector3(0, 0, 0),
+  carSpeed: 0,
+  isBoosting: false,
 
-  // Camera zoom (distance from car)
-  cameraZoom: 50,
-  minZoom: 20,
-  maxZoom: 200,
+  // Camera state
+  cameraMode: 'chase-close',
+  cameraLookOffset: { x: 0, y: 0 },
+  lastInputTime: 0,
 
-  // Input state
-  keys: {
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    boost: false,
-  },
+  // Map state
+  mapOpen: false,
+
+  // District state
+  currentDistrict: null,
+  districtDisplayName: null,
+  districtFadeState: 'hidden',
 
   // Actions
   setCarPosition: (position) => set({ carPosition: position }),
   setCarRotation: (rotation) => set({ carRotation: rotation }),
   setCarVelocity: (velocity) => set({ carVelocity: velocity }),
-  setCameraZoom: (zoom) =>
-    set((state) => ({
-      cameraZoom: Math.max(state.minZoom, Math.min(state.maxZoom, zoom)),
-    })),
-  setKey: (key, pressed) =>
-    set((state) => ({
-      keys: { ...state.keys, [key]: pressed },
-    })),
+  setCarSpeed: (speed) => set({ carSpeed: speed }),
+  setIsBoosting: (boosting) => set({ isBoosting: boosting }),
+  setCameraMode: (mode) => set({ cameraMode: mode }),
+  cycleCameraMode: () => {
+    const modes: CameraMode[] = ['chase-close', 'chase-far', 'top-down']
+    const current = get().cameraMode
+    const idx = modes.indexOf(current)
+    const next = modes[(idx + 1) % modes.length]
+    set({ cameraMode: next })
+  },
+  setCameraLookOffset: (offset) => set({ cameraLookOffset: offset }),
+  setLastInputTime: (time) => set({ lastInputTime: time }),
+  setMapOpen: (open) => set({ mapOpen: open }),
+  toggleMap: () => set((state) => ({ mapOpen: !state.mapOpen })),
+  setCurrentDistrict: (district) => set({ currentDistrict: district }),
+  showDistrictName: (name) =>
+    set({
+      districtDisplayName: name,
+      districtFadeState: 'in',
+    }),
+  setDistrictFadeState: (state) => set({ districtFadeState: state }),
 }))

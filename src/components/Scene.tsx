@@ -1,50 +1,76 @@
-import { Suspense } from 'react'
+import { Suspense, useMemo } from 'react'
 import { Physics } from '@react-three/rapier'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
-import { Ground } from './Ground'
-import { Roads } from './Roads'
-import { Buildings } from './Buildings'
+import { generateCity } from '../city/generateCity'
+import { CityRoads } from './CityRoads'
+import { CityBuildings } from './CityBuildings'
+import { CityEnvironment } from './CityEnvironment'
 import { Car } from './Car'
-import { CameraController } from './CameraController'
+import { ChaseCamera } from './ChaseCamera'
 
-export function Scene() {
+interface SceneProps {
+  onCityGenerated: (cityData: ReturnType<typeof generateCity>) => void
+}
+
+export function Scene({ onCityGenerated }: SceneProps) {
+  // Generate city data once
+  const cityData = useMemo(() => {
+    const data = generateCity()
+    onCityGenerated(data)
+    return data
+  }, [onCityGenerated])
+
   return (
     <>
       {/* Lighting */}
-      <ambientLight intensity={0.2} />
+      <ambientLight intensity={0.15} />
       <directionalLight
-        position={[50, 100, 50]}
-        intensity={0.5}
+        position={[100, 150, 50]}
+        intensity={0.4}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-far={500}
-        shadow-camera-left={-200}
-        shadow-camera-right={200}
-        shadow-camera-top={200}
-        shadow-camera-bottom={-200}
+        shadow-camera-left={-300}
+        shadow-camera-right={300}
+        shadow-camera-top={300}
+        shadow-camera-bottom={-300}
       />
 
+      {/* Hemisphere light for subtle fill */}
+      <hemisphereLight args={['#1a1a2e', '#0a0a0f', 0.3]} />
+
       {/* Fog for atmosphere */}
-      <fog attach="fog" args={['#050510', 50, 400]} />
+      <fog attach="fog" args={['#050510', 100, 500]} />
 
       {/* Physics world */}
       <Suspense fallback={null}>
-        <Physics gravity={[0, -30, 0]} debug={false}>
-          <Ground />
-          <Roads />
-          <Buildings />
+        <Physics gravity={[0, -20, 0]}>
+          {/* City elements */}
+          <CityRoads roads={cityData.roads} />
+          <CityBuildings
+            placeLots={cityData.placeLots}
+            fillerBuildings={cityData.fillerBuildings}
+            districtSigns={cityData.districtSigns}
+          />
+          <CityEnvironment
+            streetlights={cityData.streetlights}
+            trees={cityData.trees}
+            blocks={cityData.blocks}
+          />
+
+          {/* Player car */}
           <Car />
         </Physics>
       </Suspense>
 
       {/* Camera controller */}
-      <CameraController />
+      <ChaseCamera />
 
       {/* Post-processing effects */}
       <EffectComposer>
         <Bloom
-          intensity={1.5}
-          luminanceThreshold={0.1}
+          intensity={1.2}
+          luminanceThreshold={0.2}
           luminanceSmoothing={0.9}
           mipmapBlur
         />
