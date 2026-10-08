@@ -24,6 +24,7 @@ function PlaceBuilding({ lot }: PlaceBuildingProps) {
       colliders="cuboid"
       position={[position.x, height / 2, position.z]}
       rotation={[0, rotation, 0]}
+      userData={{ placeId: place.id }}
     >
       {/* Main building */}
       <mesh castShadow receiveShadow>

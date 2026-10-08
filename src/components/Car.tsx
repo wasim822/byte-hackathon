@@ -3,22 +3,10 @@ import { useFrame } from '@react-three/fiber'
 import { RigidBody, RapierRigidBody } from '@react-three/rapier'
 import * as THREE from 'three'
 import { useGameStore } from '../store/gameStore'
+import { defaultVehicle } from '../data/vehicleConfigs'
 
-// Real-world scale: 1 unit = 1 meter
-// Car is ~4.5m long, ~2m wide
-const CAR_LENGTH = 4.5
-const CAR_WIDTH = 2
-const CAR_HEIGHT = 1.4
-
-// Physics tuned for fast arcade feel
-const CAR_ACCELERATION = 120 // Very fast acceleration
-const CAR_BRAKE_FORCE = 80
-const CAR_BOOST_MULTIPLIER = 2
-const CAR_MAX_SPEED = 120 // ~430 km/h
-const CAR_MAX_BOOST_SPEED = 180 // ~650 km/h
-const CAR_TURN_SPEED = 2.2 // Smoother turning
-const CAR_FRICTION = 0.975
-const CAR_ANGULAR_FRICTION = 0.75 // More damping on rotation
+// Get config from vehicleConfigs.ts
+const config = defaultVehicle
 
 export function Car() {
   const rigidBodyRef = useRef<RapierRigidBody>(null)
@@ -131,22 +119,22 @@ export function Car() {
     setIsBoosting(keys.boost && keys.forward)
 
     // Acceleration
-    const boost = keys.boost ? CAR_BOOST_MULTIPLIER : 1
-    const maxSpeed = keys.boost ? CAR_MAX_BOOST_SPEED : CAR_MAX_SPEED
+    const boost = keys.boost ? config.boostMultiplier : 1
+    const maxSpeed = keys.boost ? config.maxBoostSpeed : config.maxSpeed
     let acceleration = 0
 
     const dt = Math.min(delta, 0.033) // Cap delta time
 
     if (keys.forward && currentSpeed < maxSpeed) {
-      acceleration = CAR_ACCELERATION * boost * dt
+      acceleration = config.acceleration * boost * dt
     }
     if (keys.backward) {
       if (currentSpeed > 0.5) {
         // Braking
-        acceleration = -CAR_BRAKE_FORCE * dt
+        acceleration = -config.brakeForce * dt
       } else if (currentSpeed > -maxSpeed / 3) {
         // Reversing
-        acceleration = -CAR_ACCELERATION * 0.5 * dt
+        acceleration = -config.acceleration * 0.5 * dt
       }
     }
 
@@ -155,21 +143,21 @@ export function Car() {
     let newVelZ = velocity.z + forwardZ * acceleration
 
     // Apply friction (more friction when not accelerating)
-    const frictionFactor = keys.forward || keys.backward ? CAR_FRICTION : CAR_FRICTION * 0.98
+    const frictionFactor = keys.forward || keys.backward ? config.friction : config.friction * 0.98
     newVelX *= frictionFactor
     newVelZ *= frictionFactor
 
     rb.setLinvel({ x: newVelX, y: velocity.y, z: newVelZ }, true)
 
     // Turning (scales with speed for arcade feel)
-    const speedFactor = Math.min(absSpeed / 8, 1) * (0.5 + absSpeed / CAR_MAX_SPEED * 0.5)
+    const speedFactor = Math.min(absSpeed / 8, 1) * (0.5 + absSpeed / config.maxSpeed * 0.5)
     let turnAmount = 0
 
     if (keys.left) {
-      turnAmount = CAR_TURN_SPEED * speedFactor
+      turnAmount = config.turnSpeed * speedFactor
     }
     if (keys.right) {
-      turnAmount = -CAR_TURN_SPEED * speedFactor
+      turnAmount = -config.turnSpeed * speedFactor
     }
 
     // Reverse turning direction when going backward
@@ -178,7 +166,7 @@ export function Car() {
     }
 
     // Apply angular velocity for turning
-    const newAngVelY = angularVelocity.y * CAR_ANGULAR_FRICTION + turnAmount
+    const newAngVelY = angularVelocity.y * config.angularFriction + turnAmount
     rb.setAngvel({ x: 0, y: newAngVelY, z: 0 }, true)
 
     // Update store with car position and rotation
@@ -191,50 +179,50 @@ export function Car() {
     <RigidBody
       ref={rigidBodyRef}
       colliders="cuboid"
-      mass={1500} // ~1500 kg car
+      mass={config.mass}
       position={[0, 1.5, -60]} // Start on the roundabout
-      linearDamping={0.1}
-      angularDamping={0.3}
+      linearDamping={config.linearDamping}
+      angularDamping={config.angularDamping}
       enabledRotations={[false, true, false]}
       friction={0.7}
     >
       <group>
         {/* Car body */}
-        <mesh position={[0, CAR_HEIGHT / 2 - 0.2, 0]} castShadow>
-          <boxGeometry args={[CAR_WIDTH, CAR_HEIGHT * 0.5, CAR_LENGTH]} />
-          <meshStandardMaterial color="#1a1a2e" roughness={0.3} metalness={0.8} />
+        <mesh position={[0, config.height / 2 - 0.2, 0]} castShadow>
+          <boxGeometry args={[config.width, config.height * 0.5, config.length]} />
+          <meshStandardMaterial color={config.bodyColor} roughness={0.3} metalness={0.8} />
         </mesh>
 
         {/* Car cabin */}
-        <mesh position={[0, CAR_HEIGHT - 0.2, -0.3]} castShadow>
-          <boxGeometry args={[CAR_WIDTH * 0.85, CAR_HEIGHT * 0.4, CAR_LENGTH * 0.5]} />
-          <meshStandardMaterial color="#0a0a1a" roughness={0.2} metalness={0.9} />
+        <mesh position={[0, config.height - 0.2, -0.3]} castShadow>
+          <boxGeometry args={[config.width * 0.85, config.height * 0.4, config.length * 0.5]} />
+          <meshStandardMaterial color={config.cabinColor} roughness={0.2} metalness={0.9} />
         </mesh>
 
         {/* Headlights */}
-        <mesh position={[0.6, CAR_HEIGHT / 2 - 0.1, -CAR_LENGTH / 2 - 0.02]}>
+        <mesh position={[0.6, config.height / 2 - 0.1, -config.length / 2 - 0.02]}>
           <boxGeometry args={[0.3, 0.15, 0.05]} />
           <meshBasicMaterial color="#ffffff" toneMapped={false} />
         </mesh>
-        <mesh position={[-0.6, CAR_HEIGHT / 2 - 0.1, -CAR_LENGTH / 2 - 0.02]}>
+        <mesh position={[-0.6, config.height / 2 - 0.1, -config.length / 2 - 0.02]}>
           <boxGeometry args={[0.3, 0.15, 0.05]} />
           <meshBasicMaterial color="#ffffff" toneMapped={false} />
         </mesh>
 
         {/* Taillights */}
-        <mesh position={[0.7, CAR_HEIGHT / 2 - 0.1, CAR_LENGTH / 2 + 0.02]}>
+        <mesh position={[0.7, config.height / 2 - 0.1, config.length / 2 + 0.02]}>
           <boxGeometry args={[0.25, 0.1, 0.05]} />
           <meshBasicMaterial color="#ff0040" toneMapped={false} />
         </mesh>
-        <mesh position={[-0.7, CAR_HEIGHT / 2 - 0.1, CAR_LENGTH / 2 + 0.02]}>
+        <mesh position={[-0.7, config.height / 2 - 0.1, config.length / 2 + 0.02]}>
           <boxGeometry args={[0.25, 0.1, 0.05]} />
           <meshBasicMaterial color="#ff0040" toneMapped={false} />
         </mesh>
 
         {/* Neon underglow */}
         <mesh position={[0, 0.08, 0]}>
-          <boxGeometry args={[CAR_WIDTH - 0.2, 0.03, CAR_LENGTH - 0.3]} />
-          <meshBasicMaterial color="#00ffff" toneMapped={false} transparent opacity={0.9} />
+          <boxGeometry args={[config.width - 0.2, 0.03, config.length - 0.3]} />
+          <meshBasicMaterial color={config.underglowColor} toneMapped={false} transparent opacity={0.9} />
         </mesh>
       </group>
     </RigidBody>

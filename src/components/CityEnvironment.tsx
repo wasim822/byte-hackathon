@@ -165,11 +165,11 @@ function BlockCurbs({ blocks }: BlockCurbsProps) {
                   key={`${block.id}-wall-${idx}`}
                   type="fixed"
                   colliders="cuboid"
-                  position={[midX, 0.15, midZ]}
+                  position={[midX, 0.075, midZ]}
                   rotation={[0, angle, 0]}
                 >
                   <mesh visible={false}>
-                    <boxGeometry args={[0.3, 0.3, length]} />
+                    <boxGeometry args={[0.3, 0.15, length]} />
                   </mesh>
                 </RigidBody>
               )
@@ -181,21 +181,26 @@ function BlockCurbs({ blocks }: BlockCurbsProps) {
   )
 }
 
-function WaterAndBarrier() {
+function CityEdge() {
   const waterRadius = OUTER_RADIUS + 100
-  const barrierRadius = OUTER_RADIUS
+  const wallRadius = OUTER_RADIUS
+  const wallHeight = 3 // Visible brick wall height
+  const invisibleWallHeight = 50 // Tall invisible wall to prevent escape
+  const ceilingHeight = 40 // Invisible ceiling height
 
-  // Create circular barrier segments
-  const barrierSegments = useMemo(() => {
-    const segments: { x: number; z: number; angle: number }[] = []
+  // Create circular wall segments
+  const wallSegments = useMemo(() => {
+    const segments: { x: number; z: number; angle: number; length: number }[] = []
     const numSegments = 72
 
     for (let i = 0; i < numSegments; i++) {
       const angle = (i / numSegments) * Math.PI * 2
+      const segmentLength = (2 * Math.PI * wallRadius) / numSegments + 0.5
       segments.push({
-        x: Math.cos(angle) * barrierRadius,
-        z: Math.sin(angle) * barrierRadius,
+        x: Math.cos(angle) * wallRadius,
+        z: Math.sin(angle) * wallRadius,
         angle: angle + Math.PI / 2,
+        length: segmentLength,
       })
     }
 
@@ -204,33 +209,62 @@ function WaterAndBarrier() {
 
   return (
     <group>
-      {/* Water plane */}
+      {/* Water plane - scenery only, no collider */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
-        <ringGeometry args={[OUTER_RADIUS, waterRadius, 64]} />
+        <ringGeometry args={[OUTER_RADIUS + 2, waterRadius, 64]} />
         <meshStandardMaterial color="#001020" roughness={0.3} metalness={0.8} />
       </mesh>
 
-      {/* Barrier colliders */}
-      {barrierSegments.map((seg, idx) => (
-        <RigidBody
-          key={`barrier-${idx}`}
-          type="fixed"
-          colliders="cuboid"
-          position={[seg.x, 1, seg.z]}
+      {/* Visible brick wall segments */}
+      {wallSegments.map((seg, idx) => (
+        <mesh
+          key={`wall-visible-${idx}`}
+          position={[seg.x, wallHeight / 2, seg.z]}
+          rotation={[0, seg.angle, 0]}
+          castShadow
+        >
+          <boxGeometry args={[1.5, wallHeight, seg.length]} />
+          <meshStandardMaterial color="#4a3728" roughness={0.9} metalness={0.1} />
+        </mesh>
+      ))}
+
+      {/* Neon trim on top of brick wall */}
+      {wallSegments.map((seg, idx) => (
+        <mesh
+          key={`wall-trim-${idx}`}
+          position={[seg.x, wallHeight + 0.1, seg.z]}
           rotation={[0, seg.angle, 0]}
         >
-          {/* Visible barrier */}
-          <mesh castShadow>
-            <boxGeometry args={[0.5, 2, (2 * Math.PI * barrierRadius) / 72 + 1]} />
-            <meshStandardMaterial color="#333344" roughness={0.7} metalness={0.5} />
-          </mesh>
-          {/* Neon strip on barrier */}
-          <mesh position={[0.26, 0.3, 0]}>
-            <boxGeometry args={[0.02, 0.2, (2 * Math.PI * barrierRadius) / 72]} />
-            <meshBasicMaterial color="#ff0080" toneMapped={false} />
+          <boxGeometry args={[1.6, 0.2, seg.length]} />
+          <meshBasicMaterial color="#ff0080" toneMapped={false} />
+        </mesh>
+      ))}
+
+      {/* Invisible tall wall colliders */}
+      {wallSegments.map((seg, idx) => (
+        <RigidBody
+          key={`wall-collider-${idx}`}
+          type="fixed"
+          colliders="cuboid"
+          position={[seg.x, invisibleWallHeight / 2, seg.z]}
+          rotation={[0, seg.angle, 0]}
+        >
+          <mesh visible={false}>
+            <boxGeometry args={[2, invisibleWallHeight, seg.length]} />
           </mesh>
         </RigidBody>
       ))}
+
+      {/* Invisible ceiling to prevent flying out */}
+      <RigidBody
+        type="fixed"
+        colliders="cuboid"
+        position={[0, ceilingHeight, 0]}
+      >
+        <mesh visible={false}>
+          <cylinderGeometry args={[wallRadius + 10, wallRadius + 10, 2, 32]} />
+        </mesh>
+      </RigidBody>
     </group>
   )
 }
@@ -259,7 +293,7 @@ export function CityEnvironment({ streetlights, trees, blocks }: CityEnvironment
       <Streetlights streetlights={streetlights} />
       <Trees trees={trees} />
       <BlockCurbs blocks={blocks} />
-      <WaterAndBarrier />
+      <CityEdge />
     </group>
   )
 }
