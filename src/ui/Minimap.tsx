@@ -7,9 +7,12 @@ interface MinimapProps {
   cityData: CityData
 }
 
-const MINIMAP_SIZE = 220
-const MINIMAP_SCALE = MINIMAP_SIZE / (OUTER_RADIUS * 2.5)
-const BOOST_BAR_HEIGHT = 6
+// Rectangular minimap
+const MINIMAP_WIDTH = 200
+const MINIMAP_HEIGHT = 140
+const MINIMAP_SCALE = MINIMAP_HEIGHT / (OUTER_RADIUS * 2)
+const BAR_HEIGHT = 4
+const BAR_GAP = 2
 
 // Colors
 const ROAD_COLOR = '#333333'
@@ -17,6 +20,11 @@ const WATER_COLOR = '#001830'
 const PLAYER_COLOR = '#00ffff'
 const PLACE_DOT_COLOR = '#ffffff'
 const NORTH_COLOR = '#ff0000'
+
+// Bar colors
+const SPEED_BAR_COLOR = '#00ff00' // Green
+const BOOST_BAR_COLOR = '#00aaff' // Blue
+const FUEL_BAR_COLOR = '#ffcc00' // Yellow
 
 function drawMinimap(
   ctx: CanvasRenderingContext2D,
@@ -60,7 +68,7 @@ function drawMinimap(
 
   // Draw roads
   ctx.strokeStyle = ROAD_COLOR
-  ctx.lineWidth = 8 * scale
+  ctx.lineWidth = 6 * scale
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
@@ -84,7 +92,7 @@ function drawMinimap(
     const x = (lot.position.x - carX) * scale
     const y = (lot.position.z - carZ) * scale
     ctx.beginPath()
-    ctx.arc(x, y, 3, 0, Math.PI * 2)
+    ctx.arc(x, y, 2, 0, Math.PI * 2)
     ctx.fill()
   })
 
@@ -93,21 +101,20 @@ function drawMinimap(
   ctx.beginPath()
   if (rotate) {
     // Player arrow pointing up (forward)
-    ctx.moveTo(0, -8)
-    ctx.lineTo(-5, 6)
-    ctx.lineTo(0, 3)
-    ctx.lineTo(5, 6)
+    ctx.moveTo(0, -6)
+    ctx.lineTo(-4, 5)
+    ctx.lineTo(0, 2)
+    ctx.lineTo(4, 5)
   } else {
     const x = (0 - carX) * scale
     const y = (0 - carZ) * scale
-    // Draw at car position with rotation
     ctx.save()
     ctx.translate(x, y)
     ctx.rotate(-carRotation)
-    ctx.moveTo(0, -8)
-    ctx.lineTo(-5, 6)
-    ctx.lineTo(0, 3)
-    ctx.lineTo(5, 6)
+    ctx.moveTo(0, -6)
+    ctx.lineTo(-4, 5)
+    ctx.lineTo(0, 2)
+    ctx.lineTo(4, 5)
     ctx.restore()
   }
   ctx.closePath()
@@ -115,15 +122,15 @@ function drawMinimap(
 
   // Draw north marker
   ctx.fillStyle = NORTH_COLOR
-  ctx.font = 'bold 12px sans-serif'
+  ctx.font = 'bold 10px sans-serif'
   ctx.textAlign = 'center'
   if (rotate) {
     const northAngle = -carRotation - Math.PI
-    const northX = Math.sin(northAngle) * (MINIMAP_SIZE / 2 - 15)
-    const northY = Math.cos(northAngle) * (MINIMAP_SIZE / 2 - 15)
-    ctx.fillText('N', northX, northY + 4)
+    const northX = Math.sin(northAngle) * (MINIMAP_HEIGHT / 2 - 12)
+    const northY = Math.cos(northAngle) * (MINIMAP_HEIGHT / 2 - 12)
+    ctx.fillText('N', northX, northY + 3)
   } else {
-    ctx.fillText('N', 0, -MINIMAP_SIZE / 2 + 15)
+    ctx.fillText('N', 0, -MINIMAP_HEIGHT / 2 + 12)
   }
 
   ctx.restore()
@@ -146,17 +153,17 @@ export function Minimap({ cityData }: MinimapProps) {
     if (!ctx) return
 
     // Clear
-    ctx.clearRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE)
+    ctx.clearRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT)
 
     // Clip to rounded rectangle
     ctx.save()
     ctx.beginPath()
-    ctx.roundRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE, 15)
+    ctx.roundRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT, 8)
     ctx.clip()
 
     // Background
-    ctx.fillStyle = '#000000cc'
-    ctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE)
+    ctx.fillStyle = '#000000dd'
+    ctx.fillRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT)
 
     // Draw map content
     drawMinimap(
@@ -166,23 +173,25 @@ export function Minimap({ cityData }: MinimapProps) {
       carPosition.z,
       carRotation,
       MINIMAP_SCALE,
-      MINIMAP_SIZE / 2,
-      MINIMAP_SIZE / 2,
+      MINIMAP_WIDTH / 2,
+      MINIMAP_HEIGHT / 2,
       true
     )
 
     ctx.restore()
 
     // Border
-    ctx.strokeStyle = '#ffffff33'
-    ctx.lineWidth = 2
+    ctx.strokeStyle = '#ffffff22'
+    ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.roundRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE, 15)
+    ctx.roundRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT, 8)
     ctx.stroke()
   }, [cityData, carPosition, carRotation])
 
-  // Boost bar
-  const boostPercent = isBoosting ? Math.min(carSpeed / 48, 1) : Math.min(carSpeed / 30, 1)
+  // Calculate bar values
+  const speedPercent = Math.min(carSpeed / 40, 1) // Max 40 m/s
+  const boostPercent = isBoosting ? Math.min(carSpeed / 50, 1) : 0.8 // Boost bar
+  const fuelPercent = 0.9 // Static fuel bar
 
   return (
     <div
@@ -192,36 +201,78 @@ export function Minimap({ cityData }: MinimapProps) {
         left: 20,
         display: 'flex',
         flexDirection: 'column',
-        gap: 8,
+        gap: 6,
       }}
     >
       <canvas
         ref={canvasRef}
-        width={MINIMAP_SIZE}
-        height={MINIMAP_SIZE}
+        width={MINIMAP_WIDTH}
+        height={MINIMAP_HEIGHT}
         style={{
-          borderRadius: 15,
+          borderRadius: 8,
         }}
       />
 
-      {/* Boost bar */}
-      <div
-        style={{
-          width: MINIMAP_SIZE,
-          height: BOOST_BAR_HEIGHT,
-          backgroundColor: '#000000aa',
-          borderRadius: 3,
-          overflow: 'hidden',
-        }}
-      >
+      {/* Status bars - GTA style: green/blue/yellow */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: BAR_GAP }}>
+        {/* Speed bar - Green */}
         <div
           style={{
-            width: `${boostPercent * 100}%`,
-            height: '100%',
-            backgroundColor: isBoosting ? '#ff00ff' : '#00ffff',
-            transition: 'background-color 0.2s',
+            width: MINIMAP_WIDTH,
+            height: BAR_HEIGHT,
+            backgroundColor: '#00000088',
+            borderRadius: 2,
+            overflow: 'hidden',
           }}
-        />
+        >
+          <div
+            style={{
+              width: `${speedPercent * 100}%`,
+              height: '100%',
+              backgroundColor: SPEED_BAR_COLOR,
+              transition: 'width 0.1s',
+            }}
+          />
+        </div>
+
+        {/* Boost bar - Blue */}
+        <div
+          style={{
+            width: MINIMAP_WIDTH,
+            height: BAR_HEIGHT,
+            backgroundColor: '#00000088',
+            borderRadius: 2,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              width: `${boostPercent * 100}%`,
+              height: '100%',
+              backgroundColor: isBoosting ? '#00ffff' : BOOST_BAR_COLOR,
+              transition: 'width 0.1s, background-color 0.2s',
+            }}
+          />
+        </div>
+
+        {/* Fuel bar - Yellow */}
+        <div
+          style={{
+            width: MINIMAP_WIDTH,
+            height: BAR_HEIGHT,
+            backgroundColor: '#00000088',
+            borderRadius: 2,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              width: `${fuelPercent * 100}%`,
+              height: '100%',
+              backgroundColor: FUEL_BAR_COLOR,
+            }}
+          />
+        </div>
       </div>
     </div>
   )
