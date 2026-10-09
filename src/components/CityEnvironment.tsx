@@ -1,7 +1,39 @@
 import { useMemo, useRef } from 'react'
+import { useTexture } from '@react-three/drei'
 import { RigidBody } from '@react-three/rapier'
 import * as THREE from 'three'
 import { Tree, Streetlight, Block, OUTER_RADIUS } from '../city/generateCity'
+
+// Texture hooks
+function useSidewalkTexture() {
+  const textures = useTexture({
+    map: '/assets/textures/sidewalk/color.webp',
+    normalMap: '/assets/textures/sidewalk/normal.webp',
+    roughnessMap: '/assets/textures/sidewalk/roughness.webp',
+  })
+
+  Object.values(textures).forEach(tex => {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(0.2, 0.2) // 5m per tile
+  })
+
+  return textures
+}
+
+function useGrassTexture() {
+  const textures = useTexture({
+    map: '/assets/textures/grass/color.webp',
+    normalMap: '/assets/textures/grass/normal.webp',
+    roughnessMap: '/assets/textures/grass/roughness.webp',
+  })
+
+  Object.values(textures).forEach(tex => {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(0.05, 0.05) // 20m per tile
+  })
+
+  return textures
+}
 
 interface StreetlightsProps {
   streetlights: Streetlight[]
@@ -130,53 +162,221 @@ function Trees({ trees }: TreesProps) {
   )
 }
 
-interface BlockCurbsProps {
+interface SidewalksAndCurbsProps {
   blocks: Block[]
 }
 
-function BlockCurbs({ blocks }: BlockCurbsProps) {
-  // Create curb colliders around blocks to keep car on roads
+function SidewalksAndCurbs({ blocks }: SidewalksAndCurbsProps) {
+  const sidewalkTexture = useSidewalkTexture()
+
+  // Generate sidewalk geometry and curbs for each block
+  const sidewalkData = useMemo(() => {
+    const data: {
+      sidewalkGeometry: THREE.BufferGeometry
+      curbs: { position: THREE.Vector3; rotation: number; length: number; isRed: boolean }[]
+    }[] = []
+
+    blocks.forEach((block, blockIdx) => {
+      const vertices = block.vertices
+      if (vertices.length < 4) return
+
+      // Create sidewalk shape (slightly inset from block edges)
+      const shape = new THREE.Shape()
+      const inset = 0.3 // Inset from curb
+
+      const insetVertices = vertices.map((v, i) => {
+        const prev = vertices[(i - 1 + vertices.length) % vertices.length]
+        const next = vertices[(i + 1) % vertices.length]
+
+        // Calculate inward direction
+        const dx1 = v.x - prev.x
+        const dz1 = v.z - prev.z
+        const dx2 = next.x - v.x
+        const dz2 = next.z - v.z
+
+        // Average normal
+        const len1 = Math.sqrt(dx1 * dx1 + dz1 * dz1) || 1
+        const len2 = Math.sqrt(dx2 * dx2 + dz2 * dz2) || 1
+
+        const nx = (-dz1 / len1 - dz2 / len2) / 2
+        const nz = (dx1 / len1 + dx2 / len2) / 2
+        const nLen = Math.sqrt(nx * nx + nz * nz) || 1
+
+        return {
+          x: v.x + (nx / nLen) * inset,
+          z: v.z + (nz / nLen) * inset,
+        }
+      })
+
+      if (insetVertices.length > 0) {
+        shape.moveTo(insetVertices[0].x, insetVertices[0].z)
+        for (let i = 1; i < insetVertices.length; i++) {
+          shape.lineTo(insetVertices[i].x, insetVertices[i].z)
+        }
+        shape.closePath()
+      }
+
+      const geometry = new THREE.ShapeGeometry(shape)
+      geometry.rotateX(-Math.PI / 2)
+
+      // Generate curb data
+      const curbs: { position: THREE.Vector3; rotation: number; length: number; isRed: boolean }[] = []
+
+      for (let i = 0; i < vertices.length; i++) {
+        const start = vertices[i]
+        const end = vertices[(i + 1) % vertices.length]
+
+        const dx = end.x - start.x
+        const dz = end.z - start.z
+        const length = Math.sqrt(dx * dx + dz * dz)
+        const angle = Math.atan2(dx, -dz)
+        const midX = (start.x + end.x) / 2
+        const midZ = (start.z + end.z) / 2
+
+        // Some curb sections are red (no parking zones) - about 1 in 5
+        const isRed = (blockIdx * 7 + i) % 5 === 0
+
+        curbs.push({
+          position: new THREE.Vector3(midX, 0.075, midZ),
+          rotation: angle,
+          length,
+          isRed,
+        })
+      }
+
+      data.push({ sidewalkGeometry: geometry, curbs })
+    })
+
+    return data
+  }, [blocks])
+
   return (
     <group>
-      {blocks.map((block) => {
-        const vertices = block.vertices
-        if (vertices.length < 4) return null
+      {/* Sidewalk surfaces - raised 15cm */}
+      {sidewalkData.map((data, idx) => (
+        <group key={`sidewalk-group-${idx}`}>
+          {/* Sidewalk surface */}
+          <mesh
+            geometry={data.sidewalkGeometry}
+            position={[0, 0.15, 0]}
+            receiveShadow
+          >
+            <meshStandardMaterial
+              map={sidewalkTexture.map}
+              normalMap={sidewalkTexture.normalMap}
+              roughnessMap={sidewalkTexture.roughnessMap}
+              roughness={0.9}
+              color="#d0d0d0"
+            />
+          </mesh>
 
-        // Create wall segments around the block perimeter
-        const walls: { start: { x: number; z: number }; end: { x: number; z: number } }[] = []
-        for (let i = 0; i < vertices.length; i++) {
-          const start = vertices[i]
-          const end = vertices[(i + 1) % vertices.length]
-          walls.push({ start, end })
+          {/* Curbs */}
+          {data.curbs.map((curb, curbIdx) => (
+            <group key={`curb-${idx}-${curbIdx}`}>
+              {/* Curb mesh */}
+              <mesh
+                position={curb.position}
+                rotation={[0, curb.rotation, 0]}
+                castShadow
+              >
+                <boxGeometry args={[0.2, 0.15, curb.length]} />
+                <meshStandardMaterial
+                  color={curb.isRed ? '#cc2222' : '#808080'}
+                  roughness={0.9}
+                />
+              </mesh>
+
+              {/* Curb collider */}
+              <RigidBody
+                type="fixed"
+                colliders="cuboid"
+                position={curb.position}
+                rotation={[0, curb.rotation, 0]}
+              >
+                <mesh visible={false}>
+                  <boxGeometry args={[0.3, 0.15, curb.length]} />
+                </mesh>
+              </RigidBody>
+            </group>
+          ))}
+        </group>
+      ))}
+    </group>
+  )
+}
+
+interface GrassAreasProps {
+  blocks: Block[]
+}
+
+function GrassAreas({ blocks }: GrassAreasProps) {
+  const grassTexture = useGrassTexture()
+
+  // Create grass patches in open areas of blocks
+  const grassGeometries = useMemo(() => {
+    return blocks.map((block) => {
+      const vertices = block.vertices
+      if (vertices.length < 4) return null
+
+      // Create inner grass area (inset further from sidewalk)
+      const shape = new THREE.Shape()
+      const inset = 3 // Inset from curb edge
+
+      const insetVertices = vertices.map((v, i) => {
+        const prev = vertices[(i - 1 + vertices.length) % vertices.length]
+        const next = vertices[(i + 1) % vertices.length]
+
+        const dx1 = v.x - prev.x
+        const dz1 = v.z - prev.z
+        const dx2 = next.x - v.x
+        const dz2 = next.z - v.z
+
+        const len1 = Math.sqrt(dx1 * dx1 + dz1 * dz1) || 1
+        const len2 = Math.sqrt(dx2 * dx2 + dz2 * dz2) || 1
+
+        const nx = (-dz1 / len1 - dz2 / len2) / 2
+        const nz = (dx1 / len1 + dx2 / len2) / 2
+        const nLen = Math.sqrt(nx * nx + nz * nz) || 1
+
+        return {
+          x: v.x + (nx / nLen) * inset,
+          z: v.z + (nz / nLen) * inset,
         }
+      })
 
-        return (
-          <group key={block.id}>
-            {walls.map((wall, idx) => {
-              const dx = wall.end.x - wall.start.x
-              const dz = wall.end.z - wall.start.z
-              const length = Math.sqrt(dx * dx + dz * dz)
-              const angle = Math.atan2(dx, -dz)
-              const midX = (wall.start.x + wall.end.x) / 2
-              const midZ = (wall.start.z + wall.end.z) / 2
+      if (insetVertices.length > 0) {
+        shape.moveTo(insetVertices[0].x, insetVertices[0].z)
+        for (let i = 1; i < insetVertices.length; i++) {
+          shape.lineTo(insetVertices[i].x, insetVertices[i].z)
+        }
+        shape.closePath()
+      }
 
-              return (
-                <RigidBody
-                  key={`${block.id}-wall-${idx}`}
-                  type="fixed"
-                  colliders="cuboid"
-                  position={[midX, 0.075, midZ]}
-                  rotation={[0, angle, 0]}
-                >
-                  <mesh visible={false}>
-                    <boxGeometry args={[0.3, 0.15, length]} />
-                  </mesh>
-                </RigidBody>
-              )
-            })}
-          </group>
-        )
-      })}
+      const geometry = new THREE.ShapeGeometry(shape)
+      geometry.rotateX(-Math.PI / 2)
+
+      return geometry
+    }).filter(Boolean) as THREE.ShapeGeometry[]
+  }, [blocks])
+
+  return (
+    <group>
+      {grassGeometries.map((geometry, idx) => (
+        <mesh
+          key={`grass-${idx}`}
+          geometry={geometry}
+          position={[0, 0.01, 0]}
+          receiveShadow
+        >
+          <meshStandardMaterial
+            map={grassTexture.map}
+            normalMap={grassTexture.normalMap}
+            roughnessMap={grassTexture.roughnessMap}
+            roughness={1}
+            color="#4a7c4a"
+          />
+        </mesh>
+      ))}
     </group>
   )
 }
@@ -184,11 +384,10 @@ function BlockCurbs({ blocks }: BlockCurbsProps) {
 function CityEdge() {
   const waterRadius = OUTER_RADIUS + 100
   const wallRadius = OUTER_RADIUS
-  const wallHeight = 3 // Visible brick wall height
-  const invisibleWallHeight = 50 // Tall invisible wall to prevent escape
-  const ceilingHeight = 40 // Invisible ceiling height
+  const wallHeight = 3
+  const invisibleWallHeight = 50
+  const ceilingHeight = 40
 
-  // Create circular wall segments
   const wallSegments = useMemo(() => {
     const segments: { x: number; z: number; angle: number; length: number }[] = []
     const numSegments = 72
@@ -209,13 +408,13 @@ function CityEdge() {
 
   return (
     <group>
-      {/* Water plane - scenery only, no collider */}
+      {/* Water plane */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
         <ringGeometry args={[OUTER_RADIUS + 2, waterRadius, 64]} />
-        <meshStandardMaterial color="#001020" roughness={0.3} metalness={0.8} />
+        <meshStandardMaterial color="#1a4a6a" roughness={0.3} metalness={0.6} />
       </mesh>
 
-      {/* Visible brick wall segments */}
+      {/* Visible wall segments - concrete */}
       {wallSegments.map((seg, idx) => (
         <mesh
           key={`wall-visible-${idx}`}
@@ -224,19 +423,7 @@ function CityEdge() {
           castShadow
         >
           <boxGeometry args={[1.5, wallHeight, seg.length]} />
-          <meshStandardMaterial color="#4a3728" roughness={0.9} metalness={0.1} />
-        </mesh>
-      ))}
-
-      {/* Neon trim on top of brick wall */}
-      {wallSegments.map((seg, idx) => (
-        <mesh
-          key={`wall-trim-${idx}`}
-          position={[seg.x, wallHeight + 0.1, seg.z]}
-          rotation={[0, seg.angle, 0]}
-        >
-          <boxGeometry args={[1.6, 0.2, seg.length]} />
-          <meshBasicMaterial color="#ff0080" toneMapped={false} />
+          <meshStandardMaterial color="#606060" roughness={0.9} metalness={0.1} />
         </mesh>
       ))}
 
@@ -255,7 +442,7 @@ function CityEdge() {
         </RigidBody>
       ))}
 
-      {/* Invisible ceiling to prevent flying out */}
+      {/* Invisible ceiling */}
       <RigidBody
         type="fixed"
         colliders="cuboid"
@@ -270,11 +457,19 @@ function CityEdge() {
 }
 
 function Ground() {
+  const grassTexture = useGrassTexture()
+
   return (
     <RigidBody type="fixed" colliders="cuboid">
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
         <circleGeometry args={[OUTER_RADIUS + 200, 64]} />
-        <meshStandardMaterial color="#0a0a0f" />
+        <meshStandardMaterial
+          map={grassTexture.map}
+          normalMap={grassTexture.normalMap}
+          roughnessMap={grassTexture.roughnessMap}
+          roughness={1}
+          color="#3a5a3a"
+        />
       </mesh>
     </RigidBody>
   )
@@ -290,9 +485,10 @@ export function CityEnvironment({ streetlights, trees, blocks }: CityEnvironment
   return (
     <group>
       <Ground />
+      <GrassAreas blocks={blocks} />
+      <SidewalksAndCurbs blocks={blocks} />
       <Streetlights streetlights={streetlights} />
       <Trees trees={trees} />
-      <BlockCurbs blocks={blocks} />
       <CityEdge />
     </group>
   )

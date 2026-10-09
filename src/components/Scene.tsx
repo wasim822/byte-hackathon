@@ -1,12 +1,14 @@
-import { Suspense, useMemo } from 'react'
+import { Suspense, useMemo, useEffect } from 'react'
 import { Physics } from '@react-three/rapier'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
+import { Sky, Environment } from '@react-three/drei'
 import { generateCity } from '../city/generateCity'
 import { CityRoads } from './CityRoads'
 import { CityBuildings } from './CityBuildings'
 import { CityEnvironment } from './CityEnvironment'
-import { Car } from './Car'
+import { Car, setPlaceLotPositions } from './Car'
 import { ChaseCamera } from './ChaseCamera'
+import * as THREE from 'three'
 
 interface SceneProps {
   onCityGenerated: (cityData: ReturnType<typeof generateCity>) => void
@@ -20,27 +22,35 @@ export function Scene({ onCityGenerated }: SceneProps) {
     return data
   }, [onCityGenerated])
 
+  // Set place lot positions for E key proximity check
+  useEffect(() => {
+    const positions = new Map<string, THREE.Vector3>()
+    cityData.placeLots.forEach(lot => {
+      positions.set(lot.place.id, new THREE.Vector3(lot.position.x, 0, lot.position.z))
+    })
+    setPlaceLotPositions(positions)
+  }, [cityData.placeLots])
+
   return (
     <>
-      {/* Lighting */}
-      <ambientLight intensity={0.15} />
+      {/* Sky */}
+      <Sky sunPosition={[100, 60, 50]} />
+
+      {/* HDRI environment for reflections only */}
+      <Environment files="/assets/hdri/city-day-1k.hdr" background={false} />
+
+      {/* Hemisphere light (sky/ground fill) */}
+      <hemisphereLight args={['#87ceeb', '#8b7355', 0.8]} />
+
+      {/* Directional sun light - no shadows for performance */}
       <directionalLight
-        position={[100, 150, 50]}
-        intensity={0.4}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-far={500}
-        shadow-camera-left={-300}
-        shadow-camera-right={300}
-        shadow-camera-top={300}
-        shadow-camera-bottom={-300}
+        position={[100, 60, 50]}
+        intensity={2}
+        color="#fffaf0"
       />
 
-      {/* Hemisphere light for subtle fill */}
-      <hemisphereLight args={['#1a1a2e', '#0a0a0f', 0.3]} />
-
-      {/* Fog for atmosphere */}
-      <fog attach="fog" args={['#050510', 100, 500]} />
+      {/* Fog - light blue-grey for daytime haze */}
+      <fog attach="fog" args={['#b8c4d0', 150, 700]} />
 
       {/* Physics world */}
       <Suspense fallback={null}>

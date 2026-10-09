@@ -1,12 +1,20 @@
 import { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { RigidBody, RapierRigidBody } from '@react-three/rapier'
+import { RigidBody, RapierRigidBody, CollisionEnterPayload } from '@react-three/rapier'
 import * as THREE from 'three'
 import { useGameStore } from '../store/gameStore'
 import { defaultVehicle } from '../data/vehicleConfigs'
+import { places } from '../data/places'
 
 // Get config from vehicleConfigs.ts
 const config = defaultVehicle
+
+// Store place lot positions for E key proximity check
+let placeLotPositions: Map<string, THREE.Vector3> = new Map()
+
+export function setPlaceLotPositions(positions: Map<string, THREE.Vector3>) {
+  placeLotPositions = positions
+}
 
 export function Car() {
   const rigidBodyRef = useRef<RapierRigidBody>(null)
@@ -16,6 +24,7 @@ export function Car() {
     left: false,
     right: false,
     boost: false,
+    interact: false,
   })
 
   const setCarPosition = useGameStore((state) => state.setCarPosition)
@@ -23,6 +32,9 @@ export function Car() {
   const setCarSpeed = useGameStore((state) => state.setCarSpeed)
   const setIsBoosting = useGameStore((state) => state.setIsBoosting)
   const mapOpen = useGameStore((state) => state.mapOpen)
+  const showVisitPopup = useGameStore((state) => state.showVisitPopup)
+  const canShowPopup = useGameStore((state) => state.canShowPopup)
+  const visitPopup = useGameStore((state) => state.visitPopup)
 
   // Set up keyboard controls
   useEffect(() => {
@@ -49,6 +61,9 @@ export function Car() {
         case 'ShiftRight':
           keysRef.current.boost = true
           break
+        case 'KeyE':
+          keysRef.current.interact = true
+          break
       }
     }
 
@@ -73,6 +88,9 @@ export function Car() {
         case 'ShiftLeft':
         case 'ShiftRight':
           keysRef.current.boost = false
+          break
+        case 'KeyE':
+          keysRef.current.interact = false
           break
       }
     }
@@ -171,9 +189,45 @@ export function Car() {
 
     // Update store with car position and rotation
     const position = rb.translation()
-    setCarPosition(new THREE.Vector3(position.x, position.y, position.z))
+    const carPos = new THREE.Vector3(position.x, position.y, position.z)
+    setCarPosition(carPos)
     setCarRotation(carAngle)
+
+    // Check for E key interaction with nearby place buildings
+    if (keys.interact && !visitPopup && absSpeed < 5) {
+      keysRef.current.interact = false // Consume the key press
+
+      // Find closest place within 12m
+      let closestPlace = null
+      let closestDist = 12
+
+      placeLotPositions.forEach((lotPos, placeId) => {
+        const dist = carPos.distanceTo(lotPos)
+        if (dist < closestDist && canShowPopup(placeId)) {
+          closestDist = dist
+          closestPlace = places.find(p => p.id === placeId)
+        }
+      })
+
+      if (closestPlace) {
+        showVisitPopup(closestPlace, carPos)
+      }
+    }
   })
+
+  // Handle collision with place buildings
+  const handleCollision = (payload: CollisionEnterPayload) => {
+    const userData = payload.other.rigidBody?.userData as { placeId?: string } | undefined
+    if (userData?.placeId && !visitPopup) {
+      const place = places.find(p => p.id === userData.placeId)
+      if (place && canShowPopup(place.id)) {
+        const pos = rigidBodyRef.current?.translation()
+        if (pos) {
+          showVisitPopup(place, new THREE.Vector3(pos.x, pos.y, pos.z))
+        }
+      }
+    }
+  }
 
   return (
     <RigidBody
@@ -185,6 +239,7 @@ export function Car() {
       angularDamping={config.angularDamping}
       enabledRotations={[false, true, false]}
       friction={0.7}
+      onCollisionEnter={handleCollision}
     >
       <group>
         {/* Car body */}

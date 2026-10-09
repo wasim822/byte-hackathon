@@ -5,18 +5,15 @@ import { RigidBody } from '@react-three/rapier'
 import * as THREE from 'three'
 import { PlaceLot, FillerBuilding, DistrictSign } from '../city/generateCity'
 
+// Light concrete grey for daytime look
+const BUILDING_COLOR = '#c8c8c8'
+
 interface PlaceBuildingProps {
   lot: PlaceLot
 }
 
 function PlaceBuilding({ lot }: PlaceBuildingProps) {
   const { place, position, rotation, width, depth, height } = lot
-
-  // Edge geometry for neon outline
-  const edgesGeometry = useMemo(() => {
-    const boxGeom = new THREE.BoxGeometry(width, height, depth)
-    return new THREE.EdgesGeometry(boxGeom)
-  }, [width, height, depth])
 
   return (
     <RigidBody
@@ -26,41 +23,46 @@ function PlaceBuilding({ lot }: PlaceBuildingProps) {
       rotation={[0, rotation, 0]}
       userData={{ placeId: place.id }}
     >
-      {/* Main building */}
+      {/* Main building - light concrete grey */}
       <mesh castShadow receiveShadow>
         <boxGeometry args={[width, height, depth]} />
-        <meshStandardMaterial color="#1a1a2e" roughness={0.7} metalness={0.3} />
+        <meshStandardMaterial color="#c8c8c8" roughness={0.8} metalness={0.1} />
       </mesh>
 
-      {/* Neon edges */}
-      <lineSegments geometry={edgesGeometry}>
-        <lineBasicMaterial color={place.neonColor} toneMapped={false} />
-      </lineSegments>
-
-      {/* Accent strip at top */}
-      <mesh position={[0, height / 2 - 0.5, depth / 2 + 0.02]}>
-        <planeGeometry args={[width * 0.9, 0.8]} />
-        <meshBasicMaterial color={place.neonColor} toneMapped={false} />
-      </mesh>
-
-      {/* Name sign on front */}
+      {/* Name sign on front - large and readable */}
       <Text
-        position={[0, height * 0.3, depth / 2 + 0.1]}
-        fontSize={Math.min(width * 0.12, 2.5)}
-        color={place.neonColor}
+        position={[0, height * 0.6, depth / 2 + 0.15]}
+        fontSize={Math.min(width * 0.18, 4)}
+        color="#1a1a1a"
         anchorX="center"
         anchorY="middle"
-        outlineWidth={0.05}
-        outlineColor="#000000"
+        outlineWidth={0.08}
+        outlineColor="#ffffff"
+        fontWeight="bold"
       >
         {place.name}
       </Text>
 
-      {/* Accent strip on back */}
-      <mesh position={[0, height / 2 - 0.5, -depth / 2 - 0.02]} rotation={[0, Math.PI, 0]}>
-        <planeGeometry args={[width * 0.9, 0.8]} />
-        <meshBasicMaterial color={place.neonColor} toneMapped={false} />
+      {/* Colored accent band at top */}
+      <mesh position={[0, height / 2 - 1, depth / 2 + 0.02]}>
+        <planeGeometry args={[width, 2]} />
+        <meshStandardMaterial color={place.neonColor} />
       </mesh>
+
+      {/* Back sign */}
+      <Text
+        position={[0, height * 0.6, -depth / 2 - 0.15]}
+        rotation={[0, Math.PI, 0]}
+        fontSize={Math.min(width * 0.18, 4)}
+        color="#1a1a1a"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.08}
+        outlineColor="#ffffff"
+        fontWeight="bold"
+      >
+        {place.name}
+      </Text>
     </RigidBody>
   )
 }
@@ -106,7 +108,7 @@ function FillerBuildings({ buildings }: FillerBuildingsProps) {
         receiveShadow
       >
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#1a1a2e" roughness={0.8} metalness={0.2} />
+        <meshStandardMaterial color={BUILDING_COLOR} roughness={0.8} metalness={0.1} />
       </instancedMesh>
 
       {/* Add colliders for each filler building */}

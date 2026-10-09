@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { Scene } from './components/Scene'
 import { Minimap, FullMap } from './ui/Minimap'
 import { DistrictName } from './ui/DistrictName'
+import { VisitPopup } from './ui/VisitPopup'
 import { useGameStore } from './store/gameStore'
 import { CityData } from './city/generateCity'
 
@@ -58,19 +59,23 @@ function App() {
       {/* Full screen map */}
       {mapOpen && cityData && <FullMap cityData={cityData} onClose={handleCloseMap} />}
 
+      {/* Visit popup */}
+      <VisitPopup />
+
       {/* Controls hint */}
       <div
         style={{
           position: 'fixed',
           top: 20,
           left: 20,
-          color: '#ffffff66',
+          color: '#00000066',
           fontSize: 12,
           fontFamily: 'monospace',
           pointerEvents: 'none',
+          textShadow: '0 0 4px white',
         }}
       >
-        WASD/Arrows: Drive | Shift: Boost | C: Camera | M: Map
+        WASD: Drive | Shift: Boost | E: Visit | M: Map
       </div>
     </>
   )

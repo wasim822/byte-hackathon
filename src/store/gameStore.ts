@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import * as THREE from 'three'
-import { District } from '../data/places'
+import { District, Place } from '../data/places'
 
 export type CameraMode = 'chase-close' | 'chase-far' | 'top-down'
 
@@ -25,6 +25,10 @@ interface GameState {
   districtDisplayName: string | null
   districtFadeState: 'in' | 'hold' | 'out' | 'hidden'
 
+  // Popup state
+  visitPopup: { place: Place; position: THREE.Vector3 } | null
+  recentlyVisited: Map<string, number>
+
   // Actions
   setCarPosition: (position: THREE.Vector3) => void
   setCarRotation: (rotation: number) => void
@@ -40,6 +44,10 @@ interface GameState {
   setCurrentDistrict: (district: District | null) => void
   showDistrictName: (name: string) => void
   setDistrictFadeState: (state: 'in' | 'hold' | 'out' | 'hidden') => void
+  showVisitPopup: (place: Place, position: THREE.Vector3) => void
+  hideVisitPopup: () => void
+  markRecentlyVisited: (placeId: string) => void
+  canShowPopup: (placeId: string) => boolean
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -62,6 +70,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentDistrict: null,
   districtDisplayName: null,
   districtFadeState: 'hidden',
+
+  // Popup state
+  visitPopup: null,
+  recentlyVisited: new Map(),
 
   // Actions
   setCarPosition: (position) => set({ carPosition: position }),
@@ -88,4 +100,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       districtFadeState: 'in',
     }),
   setDistrictFadeState: (state) => set({ districtFadeState: state }),
+  showVisitPopup: (place, position) => set({ visitPopup: { place, position } }),
+  hideVisitPopup: () => set({ visitPopup: null }),
+  markRecentlyVisited: (placeId) => {
+    const map = new Map(get().recentlyVisited)
+    map.set(placeId, Date.now())
+    set({ recentlyVisited: map })
+  },
+  canShowPopup: (placeId) => {
+    const lastVisit = get().recentlyVisited.get(placeId)
+    if (!lastVisit) return true
+    return Date.now() - lastVisit > 5000 // 5 second cooldown
+  },
 }))
