@@ -1,5 +1,6 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useGLTF } from '@react-three/drei'
 import { RigidBody, RapierRigidBody, CollisionEnterPayload } from '@react-three/rapier'
 import * as THREE from 'three'
 import { useGameStore } from '../store/gameStore'
@@ -9,6 +10,10 @@ import { places } from '../data/places'
 // Get config from vehicleConfigs.ts
 const config = defaultVehicle
 
+// Preload the car model
+const CAR_MODEL_PATH = '/assets/models/kenney-cars/sedan-sports.glb'
+useGLTF.preload(CAR_MODEL_PATH)
+
 // Store place lot positions for E key proximity check
 let placeLotPositions: Map<string, THREE.Vector3> = new Map()
 
@@ -16,8 +21,92 @@ export function setPlaceLotPositions(positions: Map<string, THREE.Vector3>) {
   placeLotPositions = positions
 }
 
+// Glossy car material with clearcoat
+function createGlossyCarMaterial(color: string) {
+  return new THREE.MeshPhysicalMaterial({
+    color: color,
+    metalness: 0.9,
+    roughness: 0.1,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.1,
+    reflectivity: 1.0,
+  })
+}
+
+interface CarModelProps {
+  isBraking: boolean
+}
+
+function CarModel({ isBraking }: CarModelProps) {
+  const { scene } = useGLTF(CAR_MODEL_PATH)
+
+  const carMaterial = useMemo(() => createGlossyCarMaterial(config.bodyColor), [])
+
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone()
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        // Apply glossy car material to all meshes
+        mesh.material = carMaterial
+        mesh.castShadow = true
+        mesh.receiveShadow = true
+      }
+    })
+    return clone
+  }, [scene, carMaterial])
+
+  // Kenney cars are modeled at ~1 unit = 1m, scale to fit physics collider (4.5m long, 2m wide)
+  const carScale = 2.2
+
+  return (
+    <group>
+      {/* Kenney car model */}
+      <primitive
+        object={clonedScene}
+        scale={[carScale, carScale, carScale]}
+        position={[0, 0.1, 0]}
+        rotation={[0, Math.PI, 0]} // Face forward
+      />
+
+      {/* Headlights - always on */}
+      <mesh position={[0.5, 0.3, -1.8]}>
+        <boxGeometry args={[0.2, 0.1, 0.05]} />
+        <meshBasicMaterial color="#ffffff" toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.5, 0.3, -1.8]}>
+        <boxGeometry args={[0.2, 0.1, 0.05]} />
+        <meshBasicMaterial color="#ffffff" toneMapped={false} />
+      </mesh>
+
+      {/* Taillights - brighter when braking */}
+      <mesh position={[0.55, 0.35, 1.75]}>
+        <boxGeometry args={[0.2, 0.08, 0.05]} />
+        <meshBasicMaterial
+          color={isBraking ? '#ff0000' : '#660000'}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh position={[-0.55, 0.35, 1.75]}>
+        <boxGeometry args={[0.2, 0.08, 0.05]} />
+        <meshBasicMaterial
+          color={isBraking ? '#ff0000' : '#660000'}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* Neon underglow */}
+      <mesh position={[0, 0.05, 0]}>
+        <boxGeometry args={[1.4, 0.02, 3.2]} />
+        <meshBasicMaterial color={config.underglowColor} toneMapped={false} transparent opacity={0.9} />
+      </mesh>
+    </group>
+  )
+}
+
 export function Car() {
   const rigidBodyRef = useRef<RapierRigidBody>(null)
+  const [isBraking, setIsBraking] = useState(false)
   const keysRef = useRef({
     forward: false,
     backward: false,
@@ -136,6 +225,9 @@ export function Car() {
     setCarSpeed(absSpeed)
     setIsBoosting(keys.boost && keys.forward)
 
+    // Update brake state for taillights
+    setIsBraking(keys.backward && currentSpeed > 0.5)
+
     // Acceleration
     const boost = keys.boost ? config.boostMultiplier : 1
     const maxSpeed = keys.boost ? config.maxBoostSpeed : config.maxSpeed
@@ -242,43 +334,13 @@ export function Car() {
       onCollisionEnter={handleCollision}
     >
       <group>
-        {/* Car body */}
-        <mesh position={[0, config.height / 2 - 0.2, 0]} castShadow>
-          <boxGeometry args={[config.width, config.height * 0.5, config.length]} />
-          <meshStandardMaterial color={config.bodyColor} roughness={0.3} metalness={0.8} />
+        {/* Invisible collider box */}
+        <mesh visible={false}>
+          <boxGeometry args={[config.width, config.height, config.length]} />
         </mesh>
 
-        {/* Car cabin */}
-        <mesh position={[0, config.height - 0.2, -0.3]} castShadow>
-          <boxGeometry args={[config.width * 0.85, config.height * 0.4, config.length * 0.5]} />
-          <meshStandardMaterial color={config.cabinColor} roughness={0.2} metalness={0.9} />
-        </mesh>
-
-        {/* Headlights */}
-        <mesh position={[0.6, config.height / 2 - 0.1, -config.length / 2 - 0.02]}>
-          <boxGeometry args={[0.3, 0.15, 0.05]} />
-          <meshBasicMaterial color="#ffffff" toneMapped={false} />
-        </mesh>
-        <mesh position={[-0.6, config.height / 2 - 0.1, -config.length / 2 - 0.02]}>
-          <boxGeometry args={[0.3, 0.15, 0.05]} />
-          <meshBasicMaterial color="#ffffff" toneMapped={false} />
-        </mesh>
-
-        {/* Taillights */}
-        <mesh position={[0.7, config.height / 2 - 0.1, config.length / 2 + 0.02]}>
-          <boxGeometry args={[0.25, 0.1, 0.05]} />
-          <meshBasicMaterial color="#ff0040" toneMapped={false} />
-        </mesh>
-        <mesh position={[-0.7, config.height / 2 - 0.1, config.length / 2 + 0.02]}>
-          <boxGeometry args={[0.25, 0.1, 0.05]} />
-          <meshBasicMaterial color="#ff0040" toneMapped={false} />
-        </mesh>
-
-        {/* Neon underglow */}
-        <mesh position={[0, 0.08, 0]}>
-          <boxGeometry args={[config.width - 0.2, 0.03, config.length - 0.3]} />
-          <meshBasicMaterial color={config.underglowColor} toneMapped={false} transparent opacity={0.9} />
-        </mesh>
+        {/* Car model */}
+        <CarModel isBraking={isBraking} />
       </group>
     </RigidBody>
   )
