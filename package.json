@@ -14,6 +14,7 @@
     "@react-three/fiber": "^8.17.10",
     "@react-three/postprocessing": "^2.16.3",
     "@react-three/rapier": "^1.4.0",
+    "fbx2gltf": "^0.9.7-p1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.170.0",
@@ -21,6 +22,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.170.0",
@@ -29,6 +33,8 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
+    "meshoptimizer": "^1.3.0",
+    "sharp": "^0.35.5",
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.11.0",
     "vite": "^5.4.10"
