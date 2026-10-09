@@ -3,46 +3,43 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGameStore, CameraMode } from '../store/gameStore'
 
-// Camera settings per mode
+// Camera settings per mode - GTA V style
+// Car sits in bottom third of screen
 const CAMERA_SETTINGS: Record<
   CameraMode,
   {
     distance: number
     height: number
     lookAhead: number
-    fovBase: number
-    fovSpeedBonus: number
-    fovBoostBonus: number
+    fovSlow: number
+    fovFast: number
   }
 > = {
   'chase-close': {
-    distance: 8,
-    height: 3.5,
-    lookAhead: 6,
-    fovBase: 60,
-    fovSpeedBonus: 10,
-    fovBoostBonus: 5,
+    distance: 6.5,     // 6.5m behind
+    height: 2.2,       // 2.2m up
+    lookAhead: 4,      // aimed 4m ahead
+    fovSlow: 55,       // FOV 55° slow
+    fovFast: 65,       // up to 65° fast
   },
   'chase-far': {
-    distance: 15,
-    height: 6,
-    lookAhead: 10,
-    fovBase: 55,
-    fovSpeedBonus: 8,
-    fovBoostBonus: 4,
+    distance: 12,
+    height: 4,
+    lookAhead: 8,
+    fovSlow: 50,
+    fovFast: 60,
   },
   'top-down': {
     distance: 0,
     height: 200,
     lookAhead: 0,
-    fovBase: 45,
-    fovSpeedBonus: 0,
-    fovBoostBonus: 0,
+    fovSlow: 45,
+    fovFast: 45,
   },
 }
 
-const CAMERA_FOLLOW_SPEED = 12 // Higher = more rigid follow
-const LOOK_RETURN_DELAY = 1.5 // seconds
+const CAMERA_FOLLOW_SPEED = 12
+const LOOK_RETURN_DELAY = 1.5
 const LOOK_RETURN_SPEED = 2
 
 export function ChaseCamera() {
@@ -51,7 +48,6 @@ export function ChaseCamera() {
   const carPosition = useGameStore((state) => state.carPosition)
   const carRotation = useGameStore((state) => state.carRotation)
   const carSpeed = useGameStore((state) => state.carSpeed)
-  const isBoosting = useGameStore((state) => state.isBoosting)
   const cameraMode = useGameStore((state) => state.cameraMode)
   const cameraLookOffset = useGameStore((state) => state.cameraLookOffset)
   const setCameraLookOffset = useGameStore((state) => state.setCameraLookOffset)
@@ -59,16 +55,13 @@ export function ChaseCamera() {
   const lastInputTime = useGameStore((state) => state.lastInputTime)
   const cycleCameraMode = useGameStore((state) => state.cycleCameraMode)
 
-  // Camera state
   const currentPosition = useRef(new THREE.Vector3(0, 50, 50))
   const currentLookAt = useRef(new THREE.Vector3(0, 0, 0))
   const isDragging = useRef(false)
   const lastMousePos = useRef({ x: 0, y: 0 })
 
-  // Raycaster for building collision
   const raycaster = useMemo(() => new THREE.Raycaster(), [])
 
-  // Handle keyboard input for camera mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'KeyC' && !e.repeat) {
@@ -80,7 +73,6 @@ export function ChaseCamera() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [cycleCameraMode])
 
-  // Handle mouse drag for look-around
   useEffect(() => {
     const canvas = gl.domElement
 
@@ -103,7 +95,6 @@ export function ChaseCamera() {
       const deltaY = e.clientY - lastMousePos.current.y
       lastMousePos.current = { x: e.clientX, y: e.clientY }
 
-      // Update look offset (limited range)
       const newX = Math.max(-Math.PI * 0.8, Math.min(Math.PI * 0.8, cameraLookOffset.x - deltaX * 0.005))
       const newY = Math.max(-0.3, Math.min(0.5, cameraLookOffset.y - deltaY * 0.003))
 
@@ -137,13 +128,11 @@ export function ChaseCamera() {
       }
     }
 
-    // Calculate target camera position
     let targetPosition: THREE.Vector3
     let targetLookAt: THREE.Vector3
 
     if (cameraMode === 'top-down') {
-      // Top-down view with slight tilt (15 degrees from vertical)
-      const tiltAngle = Math.PI / 12 // 15 degrees
+      const tiltAngle = Math.PI / 12
       targetPosition = new THREE.Vector3(
         carPosition.x + Math.sin(tiltAngle) * settings.height * 0.3,
         carPosition.y + settings.height,
@@ -151,38 +140,34 @@ export function ChaseCamera() {
       )
       targetLookAt = carPosition.clone()
     } else {
-      // Chase camera
       const totalAngle = carRotation + cameraLookOffset.x
 
-      // Camera behind the car
+      // Camera behind and up
       const behindX = Math.sin(totalAngle) * settings.distance
       const behindZ = Math.cos(totalAngle) * settings.distance
 
       targetPosition = new THREE.Vector3(
         carPosition.x + behindX,
-        carPosition.y + settings.height + cameraLookOffset.y * 5,
+        carPosition.y + settings.height + cameraLookOffset.y * 3,
         carPosition.z + behindZ
       )
 
-      // Look ahead of the car
+      // Look ahead of the car - positioned so car is in bottom third
       const aheadX = -Math.sin(carRotation) * settings.lookAhead
       const aheadZ = -Math.cos(carRotation) * settings.lookAhead
 
       targetLookAt = new THREE.Vector3(
         carPosition.x + aheadX,
-        carPosition.y + 1,
+        carPosition.y + 0.8, // Slightly above car to put car in bottom third
         carPosition.z + aheadZ
       )
     }
 
-    // Rigid follow with lerp
     const followSpeed = Math.min(dt * CAMERA_FOLLOW_SPEED, 1)
     currentPosition.current.lerp(targetPosition, followSpeed)
-
-    // Rigid look-at follow
     currentLookAt.current.lerp(targetLookAt, followSpeed)
 
-    // Building collision raycast (only in chase modes)
+    // Building collision
     if (cameraMode !== 'top-down') {
       const directionToCamera = currentPosition.current.clone().sub(carPosition)
       const distance = directionToCamera.length()
@@ -191,10 +176,8 @@ export function ChaseCamera() {
       raycaster.set(carPosition, directionToCamera)
       raycaster.far = distance
 
-      // Get all meshes in scene (simplified - in production you'd filter to buildings)
       const intersects = raycaster.intersectObjects(state.scene.children, true)
 
-      // Find first building intersection
       const buildingHit = intersects.find(
         (hit) =>
           hit.object.type === 'Mesh' &&
@@ -203,7 +186,6 @@ export function ChaseCamera() {
       )
 
       if (buildingHit) {
-        // Pull camera closer
         const pullDistance = buildingHit.distance - 1
         const pulledPosition = carPosition
           .clone()
@@ -213,17 +195,13 @@ export function ChaseCamera() {
       }
     }
 
-    // Apply camera position
     camera.position.copy(currentPosition.current)
     camera.lookAt(currentLookAt.current)
 
-    // Dynamic FOV based on speed
+    // Dynamic FOV: 55° slow to 65° fast (based on speed 0-40)
     if (camera instanceof THREE.PerspectiveCamera) {
-      const speedRatio = Math.min(carSpeed / 30, 1)
-      const targetFov =
-        settings.fovBase +
-        speedRatio * settings.fovSpeedBonus +
-        (isBoosting ? settings.fovBoostBonus : 0)
+      const speedRatio = Math.min(carSpeed / 40, 1)
+      const targetFov = settings.fovSlow + speedRatio * (settings.fovFast - settings.fovSlow)
 
       camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, dt * 3)
       camera.updateProjectionMatrix()

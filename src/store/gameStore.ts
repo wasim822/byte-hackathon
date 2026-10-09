@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { District, Place } from '../data/places'
 
 export type CameraMode = 'chase-close' | 'chase-far' | 'top-down'
+export type GraphicsQuality = 'low' | 'medium' | 'high'
 
 interface GameState {
   // Car state
@@ -29,6 +30,9 @@ interface GameState {
   visitPopup: { place: Place; position: THREE.Vector3 } | null
   recentlyVisited: Map<string, number>
 
+  // Graphics settings
+  graphicsQuality: GraphicsQuality
+
   // Actions
   setCarPosition: (position: THREE.Vector3) => void
   setCarRotation: (rotation: number) => void
@@ -48,6 +52,7 @@ interface GameState {
   hideVisitPopup: () => void
   markRecentlyVisited: (placeId: string) => void
   canShowPopup: (placeId: string) => boolean
+  setGraphicsQuality: (quality: GraphicsQuality) => void
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -74,6 +79,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Popup state
   visitPopup: null,
   recentlyVisited: new Map(),
+
+  // Graphics settings - default to medium
+  graphicsQuality: 'medium',
 
   // Actions
   setCarPosition: (position) => set({ carPosition: position }),
@@ -112,4 +120,5 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!lastVisit) return true
     return Date.now() - lastVisit > 5000 // 5 second cooldown
   },
+  setGraphicsQuality: (quality) => set({ graphicsQuality: quality }),
 }))
